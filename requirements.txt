@@ -1,0 +1,17 @@
+# CS2 RAG Coach — Python dependencies
+# Install with: pip install -r requirements.txt
+
+# Demo parsing
+awpy>=1.4.0
+
+# Vector database (local, no server needed)
+chromadb>=0.5.0
+
+# Ollama Python client (LLM + embeddings)
+ollama>=0.2.0
+
+# Data manipulation
+pandas>=2.0.0
+
+# Web UI
+gradio>=4.0.0

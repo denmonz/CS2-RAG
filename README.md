@@ -1,6 +1,6 @@
 # CS2 RAG Performance Coach
 
-Analyse your CS2 match demos with a fully local, zero-cost RAG pipeline.
+Analyze your CS2 match demos with a fully local, zero-cost RAG pipeline.
 Ask natural language questions and get actionable coaching insights backed
 by your actual match data.
 

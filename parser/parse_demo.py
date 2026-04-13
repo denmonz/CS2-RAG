@@ -9,19 +9,7 @@ import json
 import argparse
 from pathlib import Path
 from awpy import Demo
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def safe_get(d: dict, *keys, default=None):
-    """Safely traverse nested dicts."""
-    for key in keys:
-        if not isinstance(d, dict):
-            return default
-        d = d.get(key, default)
-    return d
+import polars as pl
 
 
 def build_round_chunk(round_num: int, round_data: dict, meta: dict) -> dict:
@@ -84,10 +72,22 @@ def build_round_chunk(round_num: int, round_data: dict, meta: dict) -> dict:
 # Main parsing logic
 # ---------------------------------------------------------------------------
 
+def _col(df: pl.DataFrame, name: str, default=None):
+    """Return a column's values as a list, or a list of `default` if absent."""
+    if name in df.columns:
+        return df[name].to_list()
+    return [default] * len(df)
+
+
 def parse_demo(demo_path: str, output_dir: str = "data/parsed") -> list[dict]:
     """
     Parse a .dem file and return a list of round-level chunk dicts.
     Also writes the result to <output_dir>/<match_id>.json.
+
+    awpy returns polars.DataFrames, so we use:
+      - .iter_rows(named=True)  instead of .iterrows()
+      - .filter(pl.col(…) == v) instead of df[df[col] == v]
+      - .is_empty()             instead of .empty
     """
     demo_path = Path(demo_path)
     if not demo_path.exists():
@@ -95,40 +95,41 @@ def parse_demo(demo_path: str, output_dir: str = "data/parsed") -> list[dict]:
 
     print(f"[parser] Loading demo: {demo_path.name} ...")
     demo = Demo(path=str(demo_path))
+    demo.parse()
 
-    # awpy exposes DataFrames; pull what we need
-    rounds_df = demo.rounds       # one row per round
-    kills_df  = demo.kills        # one row per kill event
+    rounds_df: pl.DataFrame = demo.rounds   # one row per round
+    kills_df:  pl.DataFrame = demo.kills    # one row per kill event
     map_name  = demo.header.get("map_name", "unknown")
-    match_id  = demo_path.stem    # use filename as match identifier
+    match_id  = demo_path.stem
 
-    meta = {"match_id": match_id, "map": map_name}
-
+    meta   = {"match_id": match_id, "map": map_name}
     chunks: list[dict] = []
 
-    for _, row in rounds_df.iterrows():
-        rnum = int(row.get("round_num", 0))
+    # Polars iteration: iter_rows(named=True) yields plain dicts per row
+    for row in rounds_df.iter_rows(named=True):
+        rnum = int(row.get("round_num") or 0)
 
-        # Gather kills that belong to this round
-        round_kills_df = kills_df[kills_df["round_num"] == rnum] if not kills_df.empty else []
-        kills_list = []
-        for _, k in (round_kills_df.iterrows() if hasattr(round_kills_df, "iterrows") else []):
-            kills_list.append({
-                "attacker_name": k.get("attacker_name", "unknown"),
-                "victim_name":   k.get("victim_name",   "unknown"),
-                "weapon":        k.get("weapon",         "unknown"),
-                "headshot":      bool(k.get("headshot", False)),
-            })
+        # Filter kills for this round using the Polars expression API
+        kills_list: list[dict] = []
+        if not kills_df.is_empty() and "round_num" in kills_df.columns:
+            round_kills_df = kills_df.filter(pl.col("round_num") == rnum)
+            for k in round_kills_df.iter_rows(named=True):
+                kills_list.append({
+                    "attacker_name": k.get("attacker_name") or "unknown",
+                    "victim_name":   k.get("victim_name")   or "unknown",
+                    "weapon":        k.get("weapon")        or "unknown",
+                    "headshot":      bool(k.get("headshot") or False),
+                })
 
         round_data = {
-            "winner_side": row.get("winner_side", "unknown"),
-            "reason":      row.get("reason",      "unknown"),
-            "ct_eq_val":   int(row.get("ct_eq_val",  0) or 0),
-            "t_eq_val":    int(row.get("t_eq_val",   0) or 0),
-            "ct_spend":    int(row.get("ct_spend",   0) or 0),
-            "t_spend":     int(row.get("t_spend",    0) or 0),
-            "bomb_planted": bool(row.get("bomb_planted", False)),
-            "kills":       kills_list,
+            "winner_side":  row.get("winner_side")  or "unknown",
+            "reason":       row.get("reason")       or "unknown",
+            "ct_eq_val":    int(row.get("ct_eq_val")  or 0),
+            "t_eq_val":     int(row.get("t_eq_val")   or 0),
+            "ct_spend":     int(row.get("ct_spend")   or 0),
+            "t_spend":      int(row.get("t_spend")    or 0),
+            "bomb_planted": bool(row.get("bomb_planted") or False),
+            "kills":        kills_list,
         }
 
         chunks.append(build_round_chunk(rnum, round_data, meta))

@@ -1,7 +1,8 @@
 # CS2 RAG Performance Coach
 
 Analyse your CS2 match demos with a fully local, zero-cost RAG pipeline.
-Ask natural language questions and get actionable coaching insights backed by your actual match data.
+Ask natural language questions and get actionable coaching insights backed
+by your actual match data.
 
 ---
 
@@ -36,7 +37,28 @@ ollama pull llama3.1:8b       # 16 GB RAM (8B, good balance)
 
 ---
 
-## 3 — Parse a demo
+## 3 — Download demos from Leetify
+
+```bash
+# Download 10 most recent demos (prompts for your Steam64 ID)
+python fetcher/fetch_demos.py --steam-id 76561198012345678 --count 10
+
+# With a Leetify API key (higher rate limits) — get one at leetify.com/app/developer
+python fetcher/fetch_demos.py --steam-id 76561198012345678 --count 10 --api-key YOUR_KEY
+
+# Or set the key as an env var so you don't have to type it each time
+export LEETIFY_API_KEY=your_key_here
+python fetcher/fetch_demos.py --steam-id 76561198012345678 --count 10
+
+# Force re-download demos already present
+python fetcher/fetch_demos.py --steam-id 76561198012345678 --count 10 --redownload
+```
+
+Demos are saved to `data/demos/` as `<game_id>.dem`, decompressed automatically.
+
+---
+
+## 4 — Parse a demo
 
 Drop your `.dem` files into `data/demos/`, then run:
 
@@ -82,6 +104,8 @@ python ui/app.py
 
 ```
 cs2-rag/
+├── fetcher/
+│   └── fetch_demos.py       # Leetify API → download .dem files
 ├── parser/
 │   └── parse_demo.py        # awpy demo → round chunks (JSON)
 ├── ingest/

@@ -3,7 +3,9 @@
 
 # IDEs
 .idea/*
+**/__pycache__/**
 
 # Data
 data/demos/*
 data/parsed/*
+data/chroma_db/*
